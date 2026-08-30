@@ -30,11 +30,12 @@
 		recorder.ondataavailable = (e) =>{
 					chunks
 					.push(e.data);}
-					
+		
 		recorder.onstop = (e) =>{
 			const audio = document.createElement("audio");
 			audio.controls = true;
 			const blob = new Blob(chunks, { type: recorder.mimeType});
+			submitAudio(blob);
 			const audioURL = window.URL.createObjectURL(blob);
 			audio.src = audioURL;
 			const recordings = document.getElementById("recordings");
@@ -42,26 +43,35 @@
 			const delButton = document.createElement("button");
 			delButton.textContent ="Delete record";
 			delButton.addEventListener('click',() =>{
+				URL.revokeObjectURL(audioURL)
 				li.remove();				
 			});
 			li.appendChild(audio)
 			li.appendChild(delButton)
 			recordings.appendChild(li);
 			
-						
+							
 			console.log("recorder stoppped");
 		};
+		
 		recorder.stop();
+		
 		
 		const tracks = window.localStream.getTracks();
 		
 		tracks.forEach((track) => {
 			track.stop();
-		});
-		URL.revokeObjectURL(audioURL)
+		})
 	};
-	
-	
+	async function submitAudio(blob){
+				const audioForm = new FormData();
+				audioForm.append('audio',blob);
+				const response = await
+					fetch("/api/v1/transcribe",{
+						method: "POST",
+						body: audioForm,
+					})
+			}
 </script>
 <html>
 <head>
@@ -79,5 +89,6 @@
 			
 		</ul>
 	</div>
+	
 </body>
 </html>
