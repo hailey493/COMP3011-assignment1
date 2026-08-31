@@ -1,8 +1,44 @@
 
 <!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Speech to Text</title>
+	<link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <h1>Speech to Text</h1>
+    <button type="button" id="startBtn" class="btn-start" onclick="startRecord()">Start recording</button>
+	<button type="button" id="stopBtn" class="btn-stop" onclick="stopRecord()">Stop recording</button>
+	<div class="container" >
+		<ul id="recordings">
+			
+		</ul>
+	</div>
+	
+</body>
+</html>
 <script>
 	let chunks;
 	let recorder;
+	
+	const startBtn = document.getElementById('startBtn');
+	const stopBtn = document.getElementById('stopBtn');
+	
+	startBtn.addEventListener('click', () => {
+		//Disable start
+		startBtn.disabled = true;
+		//Enable stop
+		stopBtn.disabled = false;
+	});
+	
+	stopBtn.addEventListener('click', () => {
+		//Disable stop
+		stopBtn.disabled = true;
+		//Enable start
+		startBtn.disabled = false;
+	})
 	
 	function startRecord(){
 		chunks = [];
@@ -16,9 +52,6 @@
 					
 					recorder = new MediaRecorder(stream);
 					recorder.start();
-					
-					console.log("recorder started")
-					
 				})
 				.catch((err) => {
 					console.error(`An error occurred: ${err}`);
@@ -31,27 +64,49 @@
 					chunks
 					.push(e.data);}
 		
-		recorder.onstop = (e) =>{
+		recorder.onstop = async (e) =>{
+			
+			// Create audio 
 			const audio = document.createElement("audio");
 			audio.controls = true;
+			
+			// Create Blob from audio
 			const blob = new Blob(chunks, { type: recorder.mimeType});
-			submitAudio(blob);
+			
+			//Send the audio to blob and wait for transcript
+			const transcript = await submitAudio(blob);
+			
+			//Create URL to play recorded audio
 			const audioURL = window.URL.createObjectURL(blob);
 			audio.src = audioURL;
+			
+			//Create p to display transcript
+			const transcriptText = document.createElement("p");
+			
+			//Add transcript to p
+			transcriptText.textContent = transcript;
+			
+			//Get recording list from web page
 			const recordings = document.getElementById("recordings");
+			
+			//Create a list item for recording
 			const li = document.createElement("li");
+			
+			//Create button for delete
 			const delButton = document.createElement("button");
 			delButton.textContent ="Delete record";
 			delButton.addEventListener('click',() =>{
 				URL.revokeObjectURL(audioURL)
 				li.remove();				
 			});
-			li.appendChild(audio)
-			li.appendChild(delButton)
-			recordings.appendChild(li);
 			
-							
-			console.log("recorder stoppped");
+			//Add audio, transcript and delete button to the list item
+			li.appendChild(audio)
+			li.appendChild(transcriptText);
+			li.appendChild(delButton)
+			
+			//Add the whole list item to the page
+			recordings.appendChild(li);
 		};
 		
 		recorder.stop();
@@ -64,31 +119,19 @@
 		})
 	};
 	async function submitAudio(blob){
+				//Create form data
 				const audioForm = new FormData();
-				audioForm.append('audio',blob);
+				audioForm.append('audio',blob, 'recording.webm');
+				
+				//Send the audio to endpoint
 				const response = await
-					fetch("/api/v1/transcribe",{
+					fetch("/api/v1/audio/transcribe",{
 						method: "POST",
 						body: audioForm,
 					})
+				
+				// get the response transcript
+				const transcript = await response.text();
+				return transcript;
 			}
 </script>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Speech to Text</title>
-	<link rel="stylesheet" href="css/style.css">
-</head>
-
-<body>
-    <h1>Speech to Text</h1>
-    <button type="button" onclick="startRecord()">Start recording</button>
-	<button type="button" onclick="stopRecord()">Stop recording</button>
-	<div class="container" >
-		<ul id="recordings">
-			
-		</ul>
-	</div>
-	
-</body>
-</html>
