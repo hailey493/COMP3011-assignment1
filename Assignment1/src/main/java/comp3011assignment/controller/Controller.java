@@ -2,6 +2,7 @@ package comp3011assignment.controller;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,12 +14,23 @@ import com.openai.models.audio.transcriptions.TranscriptionCreateParams;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 
 
 @RestController
 @RequestMapping("/api/v1")
 public class Controller {
 	
+	// get the instant time when server start 
+	final Instant serverStart = Instant.now();
+	
+	public record UptimeResponse(
+			Instant utcServerStart,
+			Instant utcNow,
+			Double serverUptimeSeconds
+			
+			) {}
 	@PostMapping(value = "/audio/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public String uploadAudio(@RequestParam("audio") MultipartFile file) 
 			throws IOException{
@@ -57,5 +69,20 @@ public class Controller {
         	}
         }
     }
+	
+	@GetMapping("/admin/uptime")
+	public ResponseEntity<UptimeResponse> getServerUptime(){
+		try {
+			Instant now = Instant.now();
+			Duration elapsed = Duration.between(serverStart, now);
+			Double secondsPassed = elapsed.getSeconds() + (elapsed.getNano() / 1_000_000_000.0) ;
+			UptimeResponse response = new UptimeResponse(serverStart, now, secondsPassed);
+			
+			return ResponseEntity.ok(response);
+		}catch (Exception e) {
+			return ResponseEntity.internalServerError().build();
+		}
+	}
+	
 	
 }
