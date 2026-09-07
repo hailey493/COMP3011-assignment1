@@ -67,17 +67,31 @@ public class Controller {
 	private final AtomicLong outputToken = new AtomicLong(0);
 	
 	@PostMapping(value = "/audio/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public String uploadAudio(@RequestParam("audio") MultipartFile file) 
+    public ResponseEntity<?> uploadAudio(@RequestParam("audio") MultipartFile file) 
 			throws IOException{
-        if (file.isEmpty()) {
-        	String emptyFile = "Please upload a valid audio file.";
-            return emptyFile;
-        }
+		//Handle error if file is empty
+		if (file.isEmpty()) {
+		    Instant now = Instant.now();
+
+		    ErrorResponse errorResponse = new ErrorResponse(
+		        now,
+		        400,
+		        "Bad Request",
+		        "The audio file is empty",
+		        "/api/v1/audio/transcribe"
+		    );
+
+		    return ResponseEntity.badRequest().body(errorResponse);
+		}
+		
         Path tempFile = null;
         try {
         	// Start the client using environment variables
         	OpenAIClient client = OpenAIOkHttpClient.fromEnv();
-            tempFile = Files.createTempFile("audio-","-" + file.getOriginalFilename());
+            tempFile = Files.createTempFile(
+            		"audio-",
+            		"-" + file.getOriginalFilename()
+            );
             
         	file.transferTo(tempFile);
         	
@@ -93,40 +107,51 @@ public class Controller {
                     .transcriptions()
                     .create(params);
             
+            // Update token statistics
             result.asTranscription().usage().ifPresent(usage -> {
+            	
             	usage.tokens().ifPresent(tokens ->{
+            		
             		inputToken.addAndGet(tokens.inputTokens());
             		outputToken.addAndGet(tokens.outputTokens());
             	});
             });
         	
-            
-            return result.asTranscription().text();
+            return ResponseEntity.ok(result.asTranscription().text());
         } catch (Exception e) {
-        	System.out.println("OpenAI error type: " + e.getClass().getName());
-            System.out.println("OpenAI error message: " + e.getMessage());
-            
-            String failUpload = "Failed to upload file";
-            return failUpload;
-        } 
+        	Instant now = Instant.now();
+        	
+        	ErrorResponse errorResponse = new ErrorResponse(
+        	        now,
+        	        500,
+        	        "Internal Server Error",
+        	        "Failed to transcribe audio file.",
+        	        "/api/v1/audio/transcribe"
+        	    );
+        	    return ResponseEntity.internalServerError().body(errorResponse);
+        }
         finally {
         	if (tempFile != null) {
         		Files.deleteIfExists(tempFile);
         	}
         }
     }
-	
 	@GetMapping("/admin/uptime")
-	public ResponseEntity<UptimeResponse> getServerUptime(){
+	public ResponseEntity<?> getServerUptime(){
+		Instant now = Instant.now();
 		try {
-			Instant now = Instant.now();
 			Duration elapsed = Duration.between(serverStart, now);
 			Double secondsPassed = elapsed.getSeconds() + (elapsed.getNano() / 1_000_000_000.0) ;
 			UptimeResponse response = new UptimeResponse(serverStart, now, secondsPassed);
 			
 			return ResponseEntity.ok(response);
 		}catch (Exception e) {
-			return ResponseEntity.internalServerError().build();
+			ErrorResponse errorResponse = new ErrorResponse(
+					now,500,
+					"Internal Server Error",
+					"An unexpected server error occurred.",
+					"/api/v1/admin/uptime");
+			return ResponseEntity.internalServerError().body(errorResponse);
 		}
 	}
 	
