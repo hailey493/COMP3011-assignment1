@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 @RestController
@@ -59,9 +60,11 @@ public class Controller {
 	
 	// the record for token usage response
 	public record GlobalStatsResponse(
-			Integer inputTokens,
-			Integer outputTokens) {}
+			Long inputTokens,
+			Long outputTokens) {}
 	
+	private final AtomicLong inputToken = new AtomicLong(0);
+	private final AtomicLong outputToken = new AtomicLong(0);
 	
 	@PostMapping(value = "/audio/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public String uploadAudio(@RequestParam("audio") MultipartFile file) 
@@ -72,20 +75,31 @@ public class Controller {
         }
         Path tempFile = null;
         try {
+        	// Start the client using environment variables
         	OpenAIClient client = OpenAIOkHttpClient.fromEnv();
             tempFile = Files.createTempFile("audio-","-" + file.getOriginalFilename());
             
         	file.transferTo(tempFile);
         	
+        	// Build the parameter for the request
         	var params = TranscriptionCreateParams.builder()
                     .file(tempFile)
                     .model("gpt-4o-mini-transcribe")
                     .build();
 
+        	// Execute the request and get response
             var result = client
                     .audio()
                     .transcriptions()
                     .create(params);
+            
+            result.asTranscription().usage().ifPresent(usage -> {
+            	usage.tokens().ifPresent(tokens ->{
+            		inputToken.addAndGet(tokens.inputTokens());
+            		outputToken.addAndGet(tokens.outputTokens());
+            	});
+            });
+        	
             
             return result.asTranscription().text();
         } catch (Exception e) {
@@ -135,9 +149,21 @@ public class Controller {
 		}
 	}
 	
-//	@GetMapping("/global/stats")
-//	public ResponseEntity<?> usageStats(){
-//		
-//	}
+	@GetMapping("/global/stats")
+	public ResponseEntity<?> usageStats(){
+		try {
+			GlobalStatsResponse globalStats = 
+					new GlobalStatsResponse(
+							inputToken.get(),
+							outputToken.get()
+					);
+			
+			return ResponseEntity.ok(globalStats);
+		}catch(Exception e) {
+			Instant now = Instant.now();
+			ErrorResponse errorResponse = new ErrorResponse(now,500,"Internal Server Error","An unexpected server error occurred.","/api/v1/global/stats");
+			return ResponseEntity.internalServerError().body(errorResponse);
+		}
+	}
 	
 }
