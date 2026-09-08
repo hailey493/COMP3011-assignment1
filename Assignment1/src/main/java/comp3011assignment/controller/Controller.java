@@ -33,10 +33,10 @@ public class Controller {
 		this.applicationContext = applicationContext;
 	}
 	
-	// get the instant time when server start 
+	// Record server start time so up time can be calculated
 	final Instant serverStart = Instant.now();
 	
-	// check graceful shutdown state 
+	// check graceful shutdown state and prevent multiple concurrent shutdown requests
 	final AtomicBoolean  shutdownStatus = new AtomicBoolean(false);
 	
 	// the record for uptime response
@@ -54,7 +54,7 @@ public class Controller {
 			String message,
 			String path) {}
 	
-	// the record for graceful shutdodwn
+	// the record for graceful shut down
 	public record ShutdownResponse(
 			String message) {}
 	
@@ -63,12 +63,23 @@ public class Controller {
 			Long inputTokens,
 			Long outputTokens) {}
 	
+	// Atomic Long are used to ensure concurrency 
 	private final AtomicLong inputToken = new AtomicLong(0);
 	private final AtomicLong outputToken = new AtomicLong(0);
 	
 	@PostMapping(value = "/audio/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> uploadAudio(@RequestParam("audio") MultipartFile file) 
 			throws IOException{
+		
+		// Testing with JMeter
+		// The 2s delay are used to simulate a request so 250 concurrent request can be tested without using OpenAI API
+//		try {
+//			Thread.sleep(2000);
+//		} catch (InterruptedException e) {
+//			Thread.currentThread().interrupt();
+//		}
+//		return ResponseEntity.ok().body("test transcription");
+		
 		//Handle error if file is empty
 		if (file.isEmpty()) {
 		    Instant now = Instant.now();
@@ -110,6 +121,7 @@ public class Controller {
             // Update token statistics
             result.asTranscription().usage().ifPresent(usage -> {
             	
+            	// Atomically add token usage from successful transcript requests
             	usage.tokens().ifPresent(tokens ->{
             		
             		inputToken.addAndGet(tokens.inputTokens());
@@ -118,6 +130,8 @@ public class Controller {
             });
         	
             return ResponseEntity.ok(result.asTranscription().text());
+        	
+        	
         } catch (Exception e) {
         	Instant now = Instant.now();
         	
@@ -159,11 +173,13 @@ public class Controller {
 	public ResponseEntity<?> shutdownServer(){
 		Instant now = Instant.now();
 		try {
+			// Only the first shutdown request is accepted
 			if (shutdownStatus.compareAndSet(false, true)) {
 				ShutdownResponse message = new ShutdownResponse("Graceful shutdown requested.");
 				new Thread(() -> applicationContext.close()).start();
 				return ResponseEntity.accepted().body(message);
 			}
+			// other shutdown request will get 409
 			else {
 				ErrorResponse response = new ErrorResponse(now,409,"Conflict","Graceful shutdown is already in progress.","/api/v1/admin/shutdown");
 				return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
