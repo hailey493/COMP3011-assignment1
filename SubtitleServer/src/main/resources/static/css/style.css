@@ -1,0 +1,23 @@
+body{
+	font-family: Arial,  sans-serif;
+}
+
+#recordings {
+	list-style: none;
+	padding: 0;
+}
+#recording li{
+	margin-bottom: 10px;
+}
+button{
+	padding: 10px 20px; font-size: 16px; cursor: pointer;
+}
+button:disabled{
+	background-color: #cccccc; cursor: not-allowed; color: #666666; 
+}
+.btn-start{
+	background-color: #28a745; color: white;
+}
+.btn-stop{
+	background-color: #dc3545; color: white;
+}
